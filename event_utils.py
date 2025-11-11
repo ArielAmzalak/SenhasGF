@@ -7,7 +7,7 @@ import os
 import re
 import json
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -334,17 +334,15 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
     return dt.strftime("%d/%m/%Y %H:%M:%S")
 
 
-def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
-    """
-    Gera um PDF estilo "ticket" (80x120mm) com QR e Code128 da Senha.
-    Campos esperados em data: area, senha, nome, telefone, bairro, ts_registro
-    """
+def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
+    """Desenha uma página do ticket no PDF fornecido."""
+
     area = str(data.get("area", "Área")).strip()
     senha = str(data.get("senha", "0")).strip()
-    nome  = format_name_upper(data.get("nome", ""))
-    tel   = format_phone_number(data.get("telefone", ""))
-    bairro= str(data.get("bairro", "")).strip()
-    ts    = str(data.get("ts_registro", "")).strip()
+    nome = format_name_upper(data.get("nome", ""))
+    tel = format_phone_number(data.get("telefone", ""))
+    bairro = str(data.get("bairro", "")).strip()
+    ts = str(data.get("ts_registro", "")).strip()
 
     # QR (conteúdo: "AREA|SENHA|NOME")
     qr_payload = f"{area}|{senha}|{nome}"
@@ -352,22 +350,22 @@ def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
     buf_qr = io.BytesIO()
     qr_img.save(buf_qr, format="PNG")
     buf_qr.seek(0)
+    buf_qr.name = "qr.png"
 
     # Code128 com a senha
     buf_bar = io.BytesIO()
-    Code128(senha, writer=ImageWriter()).write(buf_bar, options={
-        "module_width": 0.3,
-        "module_height": 12,
-        "font_size": 8,
-    })
+    Code128(senha, writer=ImageWriter()).write(
+        buf_bar,
+        options={
+            "module_width": 0.3,
+            "module_height": 12,
+            "font_size": 8,
+        },
+    )
     buf_bar.seek(0)
+    buf_bar.name = "barcode.png"
 
-    pdf = FPDF(unit="mm", format=(80, 120))  # ticket
-    pdf.set_auto_page_break(False)
     pdf.add_page()
-    pdf.set_left_margin(6)
-    pdf.set_right_margin(6)
-    pdf.set_top_margin(6)
 
     # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
@@ -384,9 +382,9 @@ def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
     # Barra + QR
     x = pdf.get_x()
     y = pdf.get_y()
-    pdf.image(buf_bar, x=x+10, y=y, w=50)
+    pdf.image(buf_bar, x=x + 10, y=y, w=50)
     pdf.ln(16)
-    pdf.image(buf_qr, x=(80-30)/2, y=pdf.get_y()+2, w=30)
+    pdf.image(buf_qr, x=(80 - 30) / 2, y=pdf.get_y() + 2, w=30)
     pdf.ln(34)
 
     # Dados do participante
@@ -401,8 +399,118 @@ def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
     pdf.set_font("Helvetica", "I", 8)
     pdf.cell(0, 6, "Guarde este ticket até o atendimento.", ln=True, align="C")
 
+
+def _pdf_bytes(pdf: FPDF) -> bytes:
     raw = pdf.output(dest="S")
     return bytes(raw) if isinstance(raw, (bytes, bytearray)) else str(raw).encode("latin-1")
+
+
+def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
+    """
+    Gera um PDF estilo "ticket" (80x120mm) com QR e Code128 da Senha.
+    Campos esperados em data: area, senha, nome, telefone, bairro, ts_registro
+    """
+
+    pdf = FPDF(unit="mm", format=(80, 120))
+    pdf.set_auto_page_break(False)
+    pdf.set_left_margin(6)
+    pdf.set_right_margin(6)
+    pdf.set_top_margin(6)
+    _render_ticket_page(pdf, data)
+    return _pdf_bytes(pdf)
+
+
+def generate_tickets_pdf(dataset: Iterable[Dict[str, str]]) -> bytes:
+    """Gera um PDF com uma página por ticket."""
+
+    dataset = list(dataset)
+    if not dataset:
+        raise ValueError("Nenhum ticket informado para gerar o PDF.")
+
+    pdf = FPDF(unit="mm", format=(80, 120))
+    pdf.set_auto_page_break(False)
+    pdf.set_left_margin(6)
+    pdf.set_right_margin(6)
+    pdf.set_top_margin(6)
+    for data in dataset:
+        _render_ticket_page(pdf, data)
+    return _pdf_bytes(pdf)
+
+
+def submit_tickets(
+    areas: Iterable[str], nome: str, telefone: str, bairro: str
+) -> Tuple[List[Dict[str, Any]], bytes, str]:
+    """
+    Registra o participante em múltiplas áreas, retornando as senhas atribuídas,
+    o PDF consolidado (uma página por área) e o timestamp utilizado.
+    """
+
+    areas = [a.strip() for a in areas if a and a.strip()]
+    if not areas:
+        raise ValueError("Selecione ao menos uma área ativa.")
+
+    service = _sheets_service()
+    spreadsheet_id = _get_spreadsheet_id()
+
+    # Consulta áreas ativas e mapeamento area->sheet
+    areas_info = read_active_areas(service, spreadsheet_id)
+    map_area_sheet = {a["area"]: a["sheet"] for a in areas_info}
+
+    missing = [a for a in areas if a not in map_area_sheet]
+    if missing:
+        raise ValueError(
+            "Áreas não encontradas ou inativas: " + ", ".join(sorted(set(missing)))
+        )
+
+    nome_fmt = format_name_upper(nome)
+    if not nome_fmt:
+        raise ValueError("Nome é obrigatório.")
+
+    telefone_fmt = format_phone_number(telefone)
+    bairro_fmt = (bairro or "").strip()
+
+    nome_fmt = format_name_upper(nome)
+    if not nome_fmt:
+        raise ValueError("Nome é obrigatório.")
+
+    telefone_fmt = format_phone_number(telefone)
+    bairro_fmt = (bairro or "").strip()
+
+    ts = now_str()
+    registros: List[Dict[str, Any]] = []
+    pdf_payload: List[Dict[str, str]] = []
+
+    for area in areas:
+        sheet_title = map_area_sheet.get(area) or area
+        row = ["", nome_fmt, telefone_fmt, bairro_fmt, ts, ""]
+        senha_num = append_ticket_and_get_number(
+            service, spreadsheet_id, sheet_title, row
+        )
+
+        registros.append(
+            {
+                "area": area,
+                "sheet": sheet_title,
+                "senha": senha_num,
+                "telefone": telefone_fmt,
+                "nome": nome_fmt,
+                "bairro": bairro_fmt,
+                "ts_registro": ts,
+            }
+        )
+        pdf_payload.append(
+            {
+                "area": area,
+                "senha": str(senha_num),
+                "nome": nome_fmt,
+                "telefone": telefone_fmt,
+                "bairro": bairro_fmt,
+                "ts_registro": ts,
+            }
+        )
+
+    pdf_bytes = generate_tickets_pdf(pdf_payload)
+    return registros, pdf_bytes, ts
 
 
 def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int, bytes]:
@@ -413,31 +521,7 @@ def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int
       3) Faz append na aba e atribui a Senha (sequencial da planilha)
       4) Gera PDF e devolve (senha_num, pdf_bytes)
     """
-    service = _sheets_service()
-    spreadsheet_id = _get_spreadsheet_id()
-
-    # Consulta áreas ativas e mapeamento area->sheet
-    areas = read_active_areas(service, spreadsheet_id)
-    map_area_sheet = {a["area"]: a["sheet"] for a in areas}
-    sheet_title = map_area_sheet.get(area) or area  # fallback: nome da área == nome da aba
-
-    nome_fmt = format_name_upper(nome)
-    if not nome_fmt:
-        raise ValueError("Nome é obrigatório.")
-
-    telefone_fmt = format_phone_number(telefone)
-    bairro_fmt = (bairro or "").strip()
-
-    ts = now_str()
-    row = ["", nome_fmt, telefone_fmt, bairro_fmt, ts, ""]  # Senha vazia; Atendimento em branco
-    senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
-
-    pdf_bytes = generate_ticket_pdf({
-        "area": area,
-        "senha": str(senha_num),
-        "nome": nome_fmt,
-        "telefone": telefone_fmt,
-        "bairro": bairro_fmt,
-        "ts_registro": ts,
-    })
-    return senha_num, pdf_bytes
+    registros, pdf_bytes, _ = submit_tickets([area], nome, telefone, bairro)
+    if not registros:
+        raise RuntimeError("Falha ao gerar a senha para a área informada.")
+    return int(registros[0]["senha"]), pdf_bytes
