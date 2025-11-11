@@ -1,7 +1,6 @@
 
 # streamlit_app_senhas.py — UI Streamlit para o Distribuidor de Senhas
 from __future__ import annotations
-
 from typing import List, Dict
 import streamlit as st
 
@@ -11,6 +10,8 @@ from event_utils import (
 
 st.set_page_config(page_title="Distribuidor de Senhas — Evento", page_icon="🎟️", layout="centered")
 st.title("🎟️ Distribuidor de Senhas — Evento")
+
+st.caption(f"Planilha conectada: `{_get_spreadsheet_id()}` (definida no código)")
 
 # Ajuda rápida
 with st.expander("Como funciona?"):
@@ -58,4 +59,3 @@ else:
                 )
             except Exception as e:
                 st.error(f"Falha ao gerar senha: {e}")
-
