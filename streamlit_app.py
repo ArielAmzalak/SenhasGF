@@ -5,7 +5,13 @@ from typing import List, Dict
 import streamlit as st
 
 from event_utils import (
-    read_active_areas, submit_ticket, now_str, _sheets_service, _get_spreadsheet_id
+    read_active_areas,
+    read_neighborhoods,
+    submit_ticket,
+    now_str,
+    format_phone_number,
+    _sheets_service,
+    _get_spreadsheet_id,
 )
 
 st.set_page_config(page_title="Distribuidor de Senhas — Evento", page_icon="🎟️", layout="centered")
@@ -28,10 +34,12 @@ with st.expander("Como funciona?"):
 
 # Teste de credenciais e carregamento de áreas
 areas_opts: List[Dict] = []
+bairros_opts: List[str] = []
 try:
     service = _sheets_service()
     sid = _get_spreadsheet_id()
     areas_opts = read_active_areas(service, sid)
+    bairros_opts = read_neighborhoods(service, sid)
 except Exception as e:
     st.error(f"⚠️ Não foi possível ler a planilha: {e}")
 
@@ -40,16 +48,49 @@ if not areas_opts:
 else:
     labels = [a["area"] for a in areas_opts]
     area_sel = st.selectbox("Área / Setor", options=[""] + labels, index=0)
-    nome = st.text_input("Nome", max_chars=80)
-    telefone = st.text_input("Telefone", max_chars=30, placeholder="(00) 00000-0000")
-    bairro = st.text_input("Bairro", max_chars=80)
+    nome_input = st.text_input("Nome", max_chars=80)
+    nome = nome_input.strip()
+    telefone_input = st.text_input("Telefone", max_chars=30, placeholder="92981231234")
+    telefone_ok = True
+    telefone_msg = ""
+    telefone_preview = ""
+    if telefone_input.strip():
+        try:
+            telefone_preview = format_phone_number(telefone_input)
+        except ValueError as exc:
+            telefone_ok = False
+            telefone_msg = str(exc)
+    else:
+        telefone_ok = False
+        telefone_msg = "Informe o telefone com 11 dígitos (incluindo DDD)."
 
-    btn = st.button("✅ Gerar senha e salvar", type="primary", disabled=(not area_sel or not nome))
+    if telefone_msg:
+        st.caption(f"ℹ️ {telefone_msg}")
+    elif telefone_preview:
+        st.caption(f"Formato final: {telefone_preview}")
+    if bairros_opts:
+        bairro = st.selectbox("Bairro", options=[""] + bairros_opts, index=0)
+    else:
+        st.info(
+            "Lista de bairros não encontrada na aba 'Bairro'. Informe manualmente abaixo ou verifique a planilha."
+        )
+        bairro = st.text_input("Bairro", max_chars=80)
+
+    btn = st.button(
+        "✅ Gerar senha e salvar",
+        type="primary",
+        disabled=(not area_sel or not nome or not telefone_ok),
+    )
 
     if btn:
         with st.spinner("Gravando na planilha e gerando PDF..."):
             try:
-                senha_num, pdf_bytes = submit_ticket(area=area_sel, nome=nome, telefone=telefone, bairro=bairro)
+                senha_num, pdf_bytes = submit_ticket(
+                    area=area_sel,
+                    nome=nome,
+                    telefone=telefone_input,
+                    bairro=bairro,
+                )
                 st.success(f"Senha **{senha_num}** gerada para a área **{area_sel}** às {now_str()}.")
                 st.download_button(
                     "⬇️ Baixar PDF da senha",
@@ -57,5 +98,7 @@ else:
                     file_name=f"senha_{area_sel}_{senha_num}.pdf",
                     mime="application/pdf",
                 )
+            except ValueError as e:
+                st.error(str(e))
             except Exception as e:
                 st.error(f"Falha ao gerar senha: {e}")
