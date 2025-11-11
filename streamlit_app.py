@@ -47,7 +47,8 @@ if not areas_opts:
 else:
     labels = [a["area"] for a in areas_opts]
     area_sel = st.selectbox("Área / Setor", options=[""] + labels, index=0)
-    nome = st.text_input("Nome", max_chars=80)
+    nome_input = st.text_input("Nome", max_chars=80)
+    nome = nome_input.strip()
     telefone = st.text_input("Telefone", max_chars=30, placeholder="(00) 00000-0000")
     if bairros_opts:
         bairro = st.selectbox("Bairro", options=[""] + bairros_opts, index=0)

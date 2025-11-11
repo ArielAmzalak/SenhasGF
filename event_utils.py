@@ -56,6 +56,43 @@ def _normalize(s: str) -> str:
     return s.strip().lower()
 
 
+def format_phone_number(telefone: str) -> str:
+    """Normaliza números para o padrão local `(92) 98123-1234`."""
+
+    telefone = (telefone or "").strip()
+    if not telefone:
+        return ""
+
+    digits = re.sub(r"\D", "", telefone)
+    if not digits:
+        return ""
+
+    # Remove código do país (55) se presente
+    if digits.startswith("55") and len(digits) > 11:
+        digits = digits[2:]
+
+    # Mantém apenas os últimos 11 dígitos, caso haja sobras
+    if len(digits) > 11:
+        digits = digits[-11:]
+
+    # Remove DDD original e força o DDD 92
+    if len(digits) >= 11:
+        digits = digits[-9:]
+    elif len(digits) >= 9:
+        digits = digits[-9:]
+    else:
+        # Completa com zeros à esquerda para manter o formato solicitado
+        digits = digits.rjust(9, "0")
+
+    return f"(92) {digits[:5]}-{digits[5:]}"
+
+
+def format_name_upper(nome: str) -> str:
+    """Garante nome em caixa alta, preservando espaços externos."""
+
+    return (nome or "").strip().upper()
+
+
 def _truthy(v: Any) -> bool:
     if isinstance(v, bool):
         return v
@@ -310,8 +347,8 @@ def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
     """
     area = str(data.get("area", "Área")).strip()
     senha = str(data.get("senha", "0")).strip()
-    nome  = str(data.get("nome", "")).strip()
-    tel   = str(data.get("telefone", "")).strip()
+    nome  = format_name_upper(data.get("nome", ""))
+    tel   = format_phone_number(data.get("telefone", ""))
     bairro= str(data.get("bairro", "")).strip()
     ts    = str(data.get("ts_registro", "")).strip()
 
@@ -390,15 +427,18 @@ def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int
     map_area_sheet = {a["area"]: a["sheet"] for a in areas}
     sheet_title = map_area_sheet.get(area) or area  # fallback: nome da área == nome da aba
 
+    nome_fmt = format_name_upper(nome)
+    telefone_fmt = format_phone_number(telefone)
+
     ts = now_str()
-    row = ["", nome, telefone, bairro, ts, ""]  # Senha vazia; Atendimento em branco
+    row = ["", nome_fmt, telefone_fmt, bairro, ts, ""]  # Senha vazia; Atendimento em branco
     senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
 
     pdf_bytes = generate_ticket_pdf({
         "area": area,
         "senha": str(senha_num),
-        "nome": nome,
-        "telefone": telefone,
+        "nome": nome_fmt,
+        "telefone": telefone_fmt,
         "bairro": bairro,
         "ts_registro": ts,
     })
