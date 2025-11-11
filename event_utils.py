@@ -42,6 +42,9 @@ HEADERS = [
 # Aba com as áreas/setores
 NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")
 
+# Aba com a lista de bairros
+BAIRROS_SHEET = os.getenv("BAIRROS_SHEET", "Bairro")
+
 # ✅ Pedido do usuário: Spreadsheet ID definido **no código** (não em secrets)
 HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
 
@@ -217,6 +220,32 @@ def read_active_areas(service, spreadsheet_id: str) -> List[Dict[str, Any]]:
         if ativa:
             areas.append({"area": area, "sheet": sheet_title, "ativa": True})
     return areas
+
+
+def read_neighborhoods(service, spreadsheet_id: str) -> List[str]:
+    """Lê a aba de bairros e devolve uma lista com os nomes válidos."""
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"{BAIRROS_SHEET}!A:A",
+        ).execute()
+    except HttpError as exc:
+        raise RuntimeError(f"Erro ao ler a aba '{BAIRROS_SHEET}': {exc}") from exc
+
+    rows = result.get("values", [])
+    if not rows:
+        return []
+
+    bairros: List[str] = []
+    for idx, row in enumerate(rows):
+        nome = (row[0] if row else "").strip()
+        if not nome:
+            continue
+        if idx == 0 and _normalize(nome) in {"nome do bairro", "bairro"}:
+            # ignora o cabeçalho
+            continue
+        bairros.append(nome)
+    return bairros
 
 
 def append_ticket_and_get_number(service, spreadsheet_id: str, sheet_title: str, row_values: List[str]) -> int:
