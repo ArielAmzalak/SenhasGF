@@ -42,6 +42,9 @@ HEADERS = [
 # Aba com as áreas/setores
 NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")
 
+# Aba com a lista de bairros
+BAIRROS_SHEET = os.getenv("BAIRROS_SHEET", "Bairro")
+
 # ✅ Pedido do usuário: Spreadsheet ID definido **no código** (não em secrets)
 HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
 
@@ -51,6 +54,43 @@ def _normalize(s: str) -> str:
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
     return s.strip().lower()
+
+
+def format_phone_number(telefone: str) -> str:
+    """Normaliza números para o padrão local `(92) 98123-1234`."""
+
+    telefone = (telefone or "").strip()
+    if not telefone:
+        return ""
+
+    digits = re.sub(r"\D", "", telefone)
+    if not digits:
+        return ""
+
+    # Remove código do país (55) se presente
+    if digits.startswith("55") and len(digits) > 11:
+        digits = digits[2:]
+
+    # Mantém apenas os últimos 11 dígitos, caso haja sobras
+    if len(digits) > 11:
+        digits = digits[-11:]
+
+    # Remove DDD original e força o DDD 92
+    if len(digits) >= 11:
+        digits = digits[-9:]
+    elif len(digits) >= 9:
+        digits = digits[-9:]
+    else:
+        # Completa com zeros à esquerda para manter o formato solicitado
+        digits = digits.rjust(9, "0")
+
+    return f"(92) {digits[:5]}-{digits[5:]}"
+
+
+def format_name_upper(nome: str) -> str:
+    """Garante nome em caixa alta, preservando espaços externos."""
+
+    return (nome or "").strip().upper()
 
 
 def _truthy(v: Any) -> bool:
@@ -219,6 +259,32 @@ def read_active_areas(service, spreadsheet_id: str) -> List[Dict[str, Any]]:
     return areas
 
 
+def read_neighborhoods(service, spreadsheet_id: str) -> List[str]:
+    """Lê a aba de bairros e devolve uma lista com os nomes válidos."""
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"{BAIRROS_SHEET}!A:A",
+        ).execute()
+    except HttpError as exc:
+        raise RuntimeError(f"Erro ao ler a aba '{BAIRROS_SHEET}': {exc}") from exc
+
+    rows = result.get("values", [])
+    if not rows:
+        return []
+
+    bairros: List[str] = []
+    for idx, row in enumerate(rows):
+        nome = (row[0] if row else "").strip()
+        if not nome:
+            continue
+        if idx == 0 and _normalize(nome) in {"nome do bairro", "bairro"}:
+            # ignora o cabeçalho
+            continue
+        bairros.append(nome)
+    return bairros
+
+
 def append_ticket_and_get_number(service, spreadsheet_id: str, sheet_title: str, row_values: List[str]) -> int:
     """
     Faz append da linha (com Senha vazia) e retorna o número da senha atribuído com base no índice da linha.
@@ -281,8 +347,8 @@ def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
     """
     area = str(data.get("area", "Área")).strip()
     senha = str(data.get("senha", "0")).strip()
-    nome  = str(data.get("nome", "")).strip()
-    tel   = str(data.get("telefone", "")).strip()
+    nome  = format_name_upper(data.get("nome", ""))
+    tel   = format_phone_number(data.get("telefone", ""))
     bairro= str(data.get("bairro", "")).strip()
     ts    = str(data.get("ts_registro", "")).strip()
 
@@ -361,15 +427,18 @@ def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int
     map_area_sheet = {a["area"]: a["sheet"] for a in areas}
     sheet_title = map_area_sheet.get(area) or area  # fallback: nome da área == nome da aba
 
+    nome_fmt = format_name_upper(nome)
+    telefone_fmt = format_phone_number(telefone)
+
     ts = now_str()
-    row = ["", nome, telefone, bairro, ts, ""]  # Senha vazia; Atendimento em branco
+    row = ["", nome_fmt, telefone_fmt, bairro, ts, ""]  # Senha vazia; Atendimento em branco
     senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
 
     pdf_bytes = generate_ticket_pdf({
         "area": area,
         "senha": str(senha_num),
-        "nome": nome,
-        "telefone": telefone,
+        "nome": nome_fmt,
+        "telefone": telefone_fmt,
         "bairro": bairro,
         "ts_registro": ts,
     })
