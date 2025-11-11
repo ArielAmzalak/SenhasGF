@@ -57,34 +57,28 @@ def _normalize(s: str) -> str:
 
 
 def format_phone_number(telefone: str) -> str:
-    """Normaliza números para o padrão local `(92) 98123-1234`."""
+    """Normaliza números para o padrão local `(92) 98123-1234`.
+
+    Levanta ``ValueError`` quando o telefone não possui 11 dígitos (incluindo DDD).
+    """
 
     telefone = (telefone or "").strip()
     if not telefone:
-        return ""
+        raise ValueError("Telefone é obrigatório.")
 
     digits = re.sub(r"\D", "", telefone)
     if not digits:
-        return ""
+        raise ValueError("Telefone deve conter apenas números válidos.")
 
-    # Remove código do país (55) se presente
+    # Remove código do país (55) se presente, mantendo 11 dígitos finais
     if digits.startswith("55") and len(digits) > 11:
         digits = digits[2:]
 
-    # Mantém apenas os últimos 11 dígitos, caso haja sobras
-    if len(digits) > 11:
-        digits = digits[-11:]
+    if len(digits) != 11:
+        raise ValueError("Telefone deve conter 11 dígitos (incluindo DDD).")
 
-    # Remove DDD original e força o DDD 92
-    if len(digits) >= 11:
-        digits = digits[-9:]
-    elif len(digits) >= 9:
-        digits = digits[-9:]
-    else:
-        # Completa com zeros à esquerda para manter o formato solicitado
-        digits = digits.rjust(9, "0")
-
-    return f"(92) {digits[:5]}-{digits[5:]}"
+    numero_local = digits[-9:]
+    return f"(92) {numero_local[:5]}-{numero_local[5:]}"
 
 
 def format_name_upper(nome: str) -> str:
@@ -428,10 +422,14 @@ def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int
     sheet_title = map_area_sheet.get(area) or area  # fallback: nome da área == nome da aba
 
     nome_fmt = format_name_upper(nome)
+    if not nome_fmt:
+        raise ValueError("Nome é obrigatório.")
+
     telefone_fmt = format_phone_number(telefone)
+    bairro_fmt = (bairro or "").strip()
 
     ts = now_str()
-    row = ["", nome_fmt, telefone_fmt, bairro, ts, ""]  # Senha vazia; Atendimento em branco
+    row = ["", nome_fmt, telefone_fmt, bairro_fmt, ts, ""]  # Senha vazia; Atendimento em branco
     senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
 
     pdf_bytes = generate_ticket_pdf({
@@ -439,7 +437,7 @@ def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int
         "senha": str(senha_num),
         "nome": nome_fmt,
         "telefone": telefone_fmt,
-        "bairro": bairro,
+        "bairro": bairro_fmt,
         "ts_registro": ts,
     })
     return senha_num, pdf_bytes

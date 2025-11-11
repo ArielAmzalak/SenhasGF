@@ -9,6 +9,7 @@ from event_utils import (
     read_neighborhoods,
     submit_ticket,
     now_str,
+    format_phone_number,
     _sheets_service,
     _get_spreadsheet_id,
 )
@@ -49,7 +50,24 @@ else:
     area_sel = st.selectbox("Área / Setor", options=[""] + labels, index=0)
     nome_input = st.text_input("Nome", max_chars=80)
     nome = nome_input.strip()
-    telefone = st.text_input("Telefone", max_chars=30, placeholder="(00) 00000-0000")
+    telefone_input = st.text_input("Telefone", max_chars=30, placeholder="92981231234")
+    telefone_ok = True
+    telefone_msg = ""
+    telefone_preview = ""
+    if telefone_input.strip():
+        try:
+            telefone_preview = format_phone_number(telefone_input)
+        except ValueError as exc:
+            telefone_ok = False
+            telefone_msg = str(exc)
+    else:
+        telefone_ok = False
+        telefone_msg = "Informe o telefone com 11 dígitos (incluindo DDD)."
+
+    if telefone_msg:
+        st.caption(f"ℹ️ {telefone_msg}")
+    elif telefone_preview:
+        st.caption(f"Formato final: {telefone_preview}")
     if bairros_opts:
         bairro = st.selectbox("Bairro", options=[""] + bairros_opts, index=0)
     else:
@@ -58,12 +76,21 @@ else:
         )
         bairro = st.text_input("Bairro", max_chars=80)
 
-    btn = st.button("✅ Gerar senha e salvar", type="primary", disabled=(not area_sel or not nome))
+    btn = st.button(
+        "✅ Gerar senha e salvar",
+        type="primary",
+        disabled=(not area_sel or not nome or not telefone_ok),
+    )
 
     if btn:
         with st.spinner("Gravando na planilha e gerando PDF..."):
             try:
-                senha_num, pdf_bytes = submit_ticket(area=area_sel, nome=nome, telefone=telefone, bairro=bairro)
+                senha_num, pdf_bytes = submit_ticket(
+                    area=area_sel,
+                    nome=nome,
+                    telefone=telefone_input,
+                    bairro=bairro,
+                )
                 st.success(f"Senha **{senha_num}** gerada para a área **{area_sel}** às {now_str()}.")
                 st.download_button(
                     "⬇️ Baixar PDF da senha",
@@ -71,5 +98,7 @@ else:
                     file_name=f"senha_{area_sel}_{senha_num}.pdf",
                     mime="application/pdf",
                 )
+            except ValueError as e:
+                st.error(str(e))
             except Exception as e:
                 st.error(f"Falha ao gerar senha: {e}")
