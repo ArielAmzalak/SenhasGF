@@ -469,6 +469,13 @@ def submit_tickets(
     telefone_fmt = format_phone_number(telefone)
     bairro_fmt = (bairro or "").strip()
 
+    nome_fmt = format_name_upper(nome)
+    if not nome_fmt:
+        raise ValueError("Nome é obrigatório.")
+
+    telefone_fmt = format_phone_number(telefone)
+    bairro_fmt = (bairro or "").strip()
+
     ts = now_str()
     registros: List[Dict[str, Any]] = []
     pdf_payload: List[Dict[str, str]] = []
