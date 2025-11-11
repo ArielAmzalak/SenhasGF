@@ -39,7 +39,11 @@ HEADERS = [
     "Data e Hora de Atendimento",
 ]
 
-NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")  # aba que contém a lista de áreas e status
+# Aba com as áreas/setores
+NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")
+
+# ✅ Pedido do usuário: Spreadsheet ID definido **no código** (não em secrets)
+HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
 
 
 def _normalize(s: str) -> str:
@@ -57,7 +61,7 @@ def _truthy(v: Any) -> bool:
 
 
 def _authorize_google_sheets():
-    # Prefer service account (GOOGLE_SERVICE_ACCOUNT_JSON) when running na nuvem
+    # Prefer service account (GOOGLE_SERVICE_ACCOUNT_JSON) quando rodar na nuvem
     sa_json = None
     if st:
         sa_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", None)
@@ -72,7 +76,7 @@ def _authorize_google_sheets():
         except Exception as exc:
             raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON inválido.") from exc
 
-    # Fallback: OAuth de usuário (GOOGLE_CLIENT_SECRET) — mantém compatibilidade com apps antigos
+    # Fallback: OAuth de usuário (GOOGLE_CLIENT_SECRET) — compatível com apps antigos
     client_json = None
     if st:
         client_json = st.secrets.get("GOOGLE_CLIENT_SECRET", None)
@@ -104,13 +108,18 @@ def _sheets_service():
 
 
 def _get_spreadsheet_id() -> str:
+    # ✅ Preferir ID definido no código (não em secrets) — pedido do usuário
+    sid = (HARDCODED_SPREADSHEET_ID or "").strip()
+    if sid:
+        return sid
+    # Fallback para compatibilidade (caso remova o hardcoded)
     sid = None
     if st:
         sid = st.secrets.get("SPREADSHEET_ID")
     if not sid:
         sid = os.getenv("SPREADSHEET_ID", "")
     if not sid:
-        raise RuntimeError("SPREADSHEET_ID não configurado (defina em st.secrets ou variável de ambiente).")
+        raise RuntimeError("SPREADSHEET_ID não configurado (defina no código, secrets ou variável de ambiente).")
     return sid
 
 
