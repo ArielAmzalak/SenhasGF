@@ -452,14 +452,14 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
 
     # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 1, "Distribuidor de Senhas", ln=True, align="C")
+    pdf.cell(0, 3, "Distribuidor de Senhas", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 6, area, ln=True, align="C")
+    pdf.cell(0, 3, area, ln=True, align="C")
     pdf.ln(4)
 
     # Senha grande
     pdf.set_font("Helvetica", "B", 40)
-    pdf.cell(0, 18, f"{senha}", ln=True, align="C")
+    pdf.cell(0, 16, f"{senha}", ln=True, align="C")
     pdf.ln(1)
 
     # Barra + QR
@@ -472,10 +472,10 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
 
     # Dados do participante
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Nome: {nome}", ln=True)
-    pdf.cell(0, 6, f"Telefone: {tel}", ln=True)
-    pdf.cell(0, 6, f"Bairro: {bairro}", ln=True)
-    pdf.cell(0, 6, f"Registro: {ts}", ln=True)
+    pdf.cell(0, 3, f"Nome: {nome}", ln=True)
+    pdf.cell(0, 3, f"Telefone: {tel}", ln=True)
+    pdf.cell(0, 3, f"Bairro: {bairro}", ln=True)
+    pdf.cell(0, 3, f"Registro: {ts}", ln=True)
     pdf.ln(6)
 
     # Rodapé
