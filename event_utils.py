@@ -63,7 +63,6 @@ BARCODE_WIDTH_MM = 50
 BARCODE_HEIGHT_MM = 14
 BARCODE_BOTTOM_SPACING_MM = 6
 QR_CODE_SIZE_MM = 30
-QR_CODE_TOP_SPACING_MM = 2
 QR_CODE_BOTTOM_SPACING_MM = 4
 DATA_LINE_HEIGHT_MM = 4.5
 DATA_SECTION_BOTTOM_SPACING_MM = 3
@@ -477,37 +476,37 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
         pdf.image(buf_logo, x=logo_x, y=logo_y, w=logo_width, h=logo_height)
         pdf.set_y(logo_y + logo_height + LOGO_BOTTOM_SPACING_MM)
 
-    # Cabeçalho
-    pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, "Galho Forte Em Ação", ln=True, align="C")
+    # Título principal
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 10, "EM AÇÃO", ln=True, align="C")
+    pdf.ln(2)
+
+    # QR Code centralizado (conteúdo já preparado acima)
+    pdf.image(
+        buf_qr,
+        x=(TICKET_WIDTH_MM - QR_CODE_SIZE_MM) / 2,
+        y=pdf.get_y(),
+        w=QR_CODE_SIZE_MM,
+        h=QR_CODE_SIZE_MM,
+    )
+    pdf.ln(QR_CODE_SIZE_MM + QR_CODE_BOTTOM_SPACING_MM)
+
+    # Área + senha em destaque logo abaixo do QR
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
-    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 38)
+    pdf.cell(0, 16, senha, ln=True, align="C")
+    pdf.ln(2)
 
-    # Senha grande
-    pdf.set_font("Helvetica", "B", 40)
-    pdf.cell(0, 18, f"{senha}", ln=True, align="C")
-    pdf.ln(1)
-
-    # Barra + QR
-    x = pdf.get_x()
-    y = pdf.get_y()
+    # Código de barras após o QR Code
     pdf.image(
         buf_bar,
-        x=x + (TICKET_WIDTH_MM - BARCODE_WIDTH_MM) / 2,
-        y=y,
+        x=(TICKET_WIDTH_MM - BARCODE_WIDTH_MM) / 2,
+        y=pdf.get_y(),
         w=BARCODE_WIDTH_MM,
         h=BARCODE_HEIGHT_MM,
     )
     pdf.ln(BARCODE_HEIGHT_MM + BARCODE_BOTTOM_SPACING_MM)
-    pdf.image(
-        buf_qr,
-        x=(TICKET_WIDTH_MM - QR_CODE_SIZE_MM) / 2,
-        y=pdf.get_y() + QR_CODE_TOP_SPACING_MM,
-        w=QR_CODE_SIZE_MM,
-        h=QR_CODE_SIZE_MM,
-    )
-    pdf.ln(QR_CODE_SIZE_MM + QR_CODE_TOP_SPACING_MM + QR_CODE_BOTTOM_SPACING_MM)
 
     # Dados do participante
     pdf.set_font("Helvetica", "", 10)
