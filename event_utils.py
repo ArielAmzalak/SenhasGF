@@ -376,10 +376,10 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
 
 def _init_ticket_pdf() -> FPDF:
     pdf = FPDF(unit="mm", format=(80, 200))  # ticket com espaço extra para logo/rodapé
-    pdf.set_auto_page_break(auto=True, margin=8)
+    pdf.set_auto_page_break(auto=True, margin=1)
     pdf.set_left_margin(6)
     pdf.set_right_margin(6)
-    pdf.set_top_margin(8)
+    pdf.set_top_margin(1)
     return pdf
 
 
