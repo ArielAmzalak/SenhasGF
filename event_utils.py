@@ -375,7 +375,7 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
 
 
 def _init_ticket_pdf() -> FPDF:
-    pdf = FPDF(unit="mm", format=(80, 200))  # ticket com espaço extra para logo/rodapé
+    pdf = FPDF(unit="mm", format=(80, 150))  # ticket com espaço extra para logo/rodapé
     pdf.set_auto_page_break(auto=True, margin=1)
     pdf.set_left_margin(6)
     pdf.set_right_margin(6)
@@ -452,7 +452,7 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
 
     # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 8, "Distribuidor de Senhas", ln=True, align="C")
+    pdf.cell(0, 1, "Distribuidor de Senhas", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
     pdf.ln(4)
