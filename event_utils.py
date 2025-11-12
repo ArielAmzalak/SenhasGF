@@ -7,7 +7,7 @@ import os
 import re
 import json
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -392,15 +392,20 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     buf_qr = io.BytesIO()
     qr_img.save(buf_qr, format="PNG")
     buf_qr.seek(0)
+    buf_qr.name = "qr.png"
 
     # Code128 com a senha
     buf_bar = io.BytesIO()
-    Code128(senha, writer=ImageWriter()).write(buf_bar, options={
-        "module_width": 0.3,
-        "module_height": 12,
-        "font_size": 8,
-    })
+    Code128(senha, writer=ImageWriter()).write(
+        buf_bar,
+        options={
+            "module_width": 0.3,
+            "module_height": 12,
+            "font_size": 8,
+        },
+    )
     buf_bar.seek(0)
+    buf_bar.name = "barcode.png"
 
     pdf.add_page()
 
