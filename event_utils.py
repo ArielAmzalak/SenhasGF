@@ -452,10 +452,10 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
 
     # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 3, "Distribuidor de Senhas", ln=True, align="C")
+    pdf.cell(0, 5, "Distribuidor de Senhas", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 3, area, ln=True, align="C")
-    pdf.ln(4)
+    pdf.cell(0, 5, area, ln=True, align="C")
+    pdf.ln(1)
 
     # Senha grande
     pdf.set_font("Helvetica", "B", 40)
@@ -468,15 +468,15 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     pdf.image(buf_bar, x=x + 10, y=y, w=50)
     pdf.ln(18)
     pdf.image(buf_qr, x=(80 - 30) / 2, y=pdf.get_y() + 2, w=30)
-    pdf.ln(36)
+    pdf.ln(30)
 
     # Dados do participante
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 3, f"Nome: {nome}", ln=True)
-    pdf.cell(0, 3, f"Telefone: {tel}", ln=True)
-    pdf.cell(0, 3, f"Bairro: {bairro}", ln=True)
-    pdf.cell(0, 3, f"Registro: {ts}", ln=True)
-    pdf.ln(6)
+    pdf.cell(0, 5, f"Nome: {nome}", ln=True)
+    pdf.cell(0, 5, f"Telefone: {tel}", ln=True)
+    pdf.cell(0, 5, f"Bairro: {bairro}", ln=True)
+    pdf.cell(0, 5, f"Registro: {ts}", ln=True)
+    pdf.ln(3)
 
     # Rodapé
     pdf.set_font("Helvetica", "I", 8)
