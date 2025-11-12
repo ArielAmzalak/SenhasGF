@@ -94,6 +94,29 @@ def _truthy(v: Any) -> bool:
     return s in {"sim", "s", "true", "1", "y", "yes", "ativo", "ativa", "on", "ok"}
 
 
+def _parse_positive_int(value: Any) -> Optional[int]:
+    """Converte valores variados para inteiro positivo, quando possível."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            num = int(value)
+        except (TypeError, ValueError):
+            return None
+    else:
+        s = re.sub(r"\D", "", str(value))
+        if not s:
+            return None
+        try:
+            num = int(s)
+        except ValueError:
+            return None
+    return num if num > 0 else None
+
+
 def _authorize_google_sheets():
     # Prefer service account (GOOGLE_SERVICE_ACCOUNT_JSON) quando rodar na nuvem
     sa_json = None
@@ -236,6 +259,12 @@ def read_active_areas(service, spreadsheet_id: str) -> List[Dict[str, Any]]:
     area_idx = _find_col_indexes(header, ["Área", "Area", "Setor", "Mesa", "Área/Setor"])
     aba_idx = _find_col_indexes(header, ["Aba", "Sheet", "AbaDestino", "Aba Destino", "Destino", "Guia", "Tab"])
     ativa_idx = _find_col_indexes(header, ["Ativa", "Ativo", "Status", "Habilitada", "Disponível"])
+    max_idx = _find_col_indexes(header, [
+        "Quantidade máxima de senhas",
+        "Qtd máxima",
+        "Qtd Senhas",
+        "Limite",
+    ])
 
     if area_idx is None:
         raise RuntimeError("Coluna 'Área' (ou equivalente) não encontrada na aba 'Nomes'.")
@@ -247,9 +276,15 @@ def read_active_areas(service, spreadsheet_id: str) -> List[Dict[str, Any]]:
             continue
         sheet_title = (row[aba_idx] if (aba_idx is not None and aba_idx < len(row)) else area).strip() or area
         ativa_val = (row[ativa_idx] if (ativa_idx is not None and ativa_idx < len(row)) else "Sim")
+        max_val = row[max_idx] if (max_idx is not None and max_idx < len(row)) else None
         ativa = _truthy(ativa_val)
         if ativa:
-            areas.append({"area": area, "sheet": sheet_title, "ativa": True})
+            areas.append({
+                "area": area,
+                "sheet": sheet_title,
+                "ativa": True,
+                "max_senhas": _parse_positive_int(max_val),
+            })
     return areas
 
 
@@ -334,9 +369,16 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
     return dt.strftime("%d/%m/%Y %H:%M:%S")
 
 
-def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
-    """Desenha uma página do ticket no PDF fornecido."""
+def _init_ticket_pdf() -> FPDF:
+    pdf = FPDF(unit="mm", format=(80, 120))  # ticket
+    pdf.set_auto_page_break(False)
+    pdf.set_left_margin(6)
+    pdf.set_right_margin(6)
+    pdf.set_top_margin(6)
+    return pdf
 
+
+def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     area = str(data.get("area", "Área")).strip()
     senha = str(data.get("senha", "0")).strip()
     nome = format_name_upper(data.get("nome", ""))
@@ -406,46 +448,27 @@ def _pdf_bytes(pdf: FPDF) -> bytes:
 
 
 def generate_ticket_pdf(data: Dict[str, str]) -> bytes:
-    """
-    Gera um PDF estilo "ticket" (80x120mm) com QR e Code128 da Senha.
-    Campos esperados em data: area, senha, nome, telefone, bairro, ts_registro
-    """
+    """Gera um PDF de ticket único."""
 
-    pdf = FPDF(unit="mm", format=(80, 120))
-    pdf.set_auto_page_break(False)
-    pdf.set_left_margin(6)
-    pdf.set_right_margin(6)
-    pdf.set_top_margin(6)
+    pdf = _init_ticket_pdf()
     _render_ticket_page(pdf, data)
     return _pdf_bytes(pdf)
 
 
-def generate_tickets_pdf(dataset: Iterable[Dict[str, str]]) -> bytes:
+def generate_tickets_pdf(tickets: List[Dict[str, str]]) -> bytes:
     """Gera um PDF com uma página por ticket."""
 
-    dataset = list(dataset)
-    if not dataset:
-        raise ValueError("Nenhum ticket informado para gerar o PDF.")
-
-    pdf = FPDF(unit="mm", format=(80, 120))
-    pdf.set_auto_page_break(False)
-    pdf.set_left_margin(6)
-    pdf.set_right_margin(6)
-    pdf.set_top_margin(6)
-    for data in dataset:
-        _render_ticket_page(pdf, data)
+    pdf = _init_ticket_pdf()
+    for ticket in tickets:
+        _render_ticket_page(pdf, ticket)
     return _pdf_bytes(pdf)
 
 
 def submit_tickets(
-    areas: Iterable[str], nome: str, telefone: str, bairro: str
-) -> Tuple[List[Dict[str, Any]], bytes, str]:
-    """
-    Registra o participante em múltiplas áreas, retornando as senhas atribuídas,
-    o PDF consolidado (uma página por área) e o timestamp utilizado.
-    """
+    areas: List[str], nome: str, telefone: str, bairro: str
+) -> Tuple[List[Dict[str, Any]], Optional[bytes], List[Dict[str, Any]]]:
+    """Submete uma ou mais senhas para diferentes áreas."""
 
-    areas = [a.strip() for a in areas if a and a.strip()]
     if not areas:
         raise ValueError("Selecione ao menos uma área ativa.")
 
@@ -455,12 +478,7 @@ def submit_tickets(
     # Consulta áreas ativas e mapeamento area->sheet
     areas_info = read_active_areas(service, spreadsheet_id)
     map_area_sheet = {a["area"]: a["sheet"] for a in areas_info}
-
-    missing = [a for a in areas if a not in map_area_sheet]
-    if missing:
-        raise ValueError(
-            "Áreas não encontradas ou inativas: " + ", ".join(sorted(set(missing)))
-        )
+    map_area_limit = {a["area"]: a.get("max_senhas") for a in areas_info}
 
     nome_fmt = format_name_upper(nome)
     if not nome_fmt:
@@ -469,59 +487,51 @@ def submit_tickets(
     telefone_fmt = format_phone_number(telefone)
     bairro_fmt = (bairro or "").strip()
 
-    nome_fmt = format_name_upper(nome)
-    if not nome_fmt:
-        raise ValueError("Nome é obrigatório.")
-
-    telefone_fmt = format_phone_number(telefone)
-    bairro_fmt = (bairro or "").strip()
-
-    ts = now_str()
-    registros: List[Dict[str, Any]] = []
-    pdf_payload: List[Dict[str, str]] = []
+    resultados: List[Dict[str, Any]] = []
+    tickets_payload: List[Dict[str, str]] = []
+    excedidas: List[Dict[str, Any]] = []
 
     for area in areas:
         sheet_title = map_area_sheet.get(area) or area
+        ts = now_str()
         row = ["", nome_fmt, telefone_fmt, bairro_fmt, ts, ""]
-        senha_num = append_ticket_and_get_number(
-            service, spreadsheet_id, sheet_title, row
-        )
+        senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
 
-        registros.append(
-            {
+        registro = {
+            "area": area,
+            "sheet": sheet_title,
+            "senha": str(senha_num),
+            "nome": nome_fmt,
+            "telefone": telefone_fmt,
+            "bairro": bairro_fmt,
+            "ts_registro": ts,
+        }
+        resultados.append(registro)
+        tickets_payload.append(registro)
+
+        limite = map_area_limit.get(area)
+        if limite is not None and senha_num > limite:
+            excedidas.append({
                 "area": area,
-                "sheet": sheet_title,
+                "limite": limite,
                 "senha": senha_num,
-                "telefone": telefone_fmt,
-                "nome": nome_fmt,
-                "bairro": bairro_fmt,
-                "ts_registro": ts,
-            }
-        )
-        pdf_payload.append(
-            {
-                "area": area,
-                "senha": str(senha_num),
-                "nome": nome_fmt,
-                "telefone": telefone_fmt,
-                "bairro": bairro_fmt,
-                "ts_registro": ts,
-            }
-        )
+            })
 
-    pdf_bytes = generate_tickets_pdf(pdf_payload)
-    return registros, pdf_bytes, ts
+    pdf_bytes: Optional[bytes] = None
+    if not excedidas:
+        pdf_bytes = generate_tickets_pdf(tickets_payload)
+    return resultados, pdf_bytes, excedidas
 
 
 def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int, bytes]:
-    """
-    Faz toda a operação:
-      1) Determina aba de destino a partir de 'Nomes' (usa 'area' -> sheet)
-      2) Gera timestamp de registro
-      3) Faz append na aba e atribui a Senha (sequencial da planilha)
-      4) Gera PDF e devolve (senha_num, pdf_bytes)
-    """
-    registros, pdf_bytes, _ = submit_tickets([area], nome, telefone, bairro)
-    if not registros:
-        raise RuntimeError("Falha ao gerar a senha para a área informada.")
-    return int(registros[0]["senha"]), pdf_bytes
+    """Compatibilidade: submete apenas uma área."""
+
+    resultados, pdf_bytes, excedidas = submit_tickets([area], nome, telefone, bairro)
+    if not resultados:
+        raise ValueError("Falha ao gerar a senha.")
+    if excedidas:
+        info = excedidas[0]
+        raise ValueError(
+            f"A área {info['area']} excedeu o limite de {info['limite']} senhas (atual: {info['senha']})."
+        )
+    return int(resultados[0]["senha"]), pdf_bytes

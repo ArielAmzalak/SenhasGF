@@ -2,6 +2,7 @@
 # streamlit_app_senhas.py — UI Streamlit para o Distribuidor de Senhas
 from __future__ import annotations
 from typing import List, Dict
+import re
 import streamlit as st
 
 from event_utils import (
@@ -23,10 +24,10 @@ with st.expander("Como funciona?"):
     st.markdown(
         """
         1. A aba **Nomes** da planilha deve listar todas as áreas, com a coluna **Ativa** marcada para as que devem aparecer aqui.
-        2. Escolha **uma ou mais áreas** (apenas as ativas são exibidas), preencha **Nome**, **Telefone** e **Bairro**.
+        2. Marque uma ou mais **Áreas** (apenas as ativas são exibidas), preencha **Nome**, **Telefone** e **Bairro**.
         3. Clique em **Gerar senhas e salvar**. O app:
-           - grava em cada aba selecionada com as colunas `Senha | Nome | Telefone | Bairro | Data e Hora de Registro | Data e Hora de Atendimento` (esta última em branco);
-           - cria a **Senha sequencial** em cada planilha (1, 2, 3, …);
+           - grava cada registro na aba correspondente com as colunas `Senha | Nome | Telefone | Bairro | Data e Hora de Registro | Data e Hora de Atendimento` (esta última em branco);
+           - cria a **Senha sequencial** da planilha (1, 2, 3, …) para cada área;
            - gera um **PDF** com uma página para cada senha.
         """
     )
@@ -47,7 +48,9 @@ if not areas_opts:
 else:
     labels = [a["area"] for a in areas_opts]
     areas_sel = st.multiselect(
-        "Áreas / Setores", options=labels, help="Selecione uma ou mais áreas para registrar."
+        "Áreas / Setores",
+        options=labels,
+        placeholder="Escolha uma ou mais áreas",
     )
     nome_input = st.text_input("Nome", max_chars=80)
     nome = nome_input.strip()
@@ -86,27 +89,51 @@ else:
     if btn:
         with st.spinner("Gravando na planilha e gerando PDF..."):
             try:
-                registros, pdf_bytes, ts_registro = submit_tickets(
+                resultados, pdf_bytes, excedidas = submit_tickets(
                     areas=areas_sel,
                     nome=nome,
                     telefone=telefone_input,
                     bairro=bairro,
                 )
-                qtd = len(registros)
-                senhas_fmt = "\n".join(
-                    f"• Área **{reg['area']}** → Senha **{reg['senha']}**" for reg in registros
-                )
-                titulo = "senhas" if qtd > 1 else "senha"
-                verbo = "geradas" if qtd > 1 else "gerada"
-                st.success(
-                    f"{qtd} {titulo} {verbo} às {ts_registro}.\n\n{senhas_fmt}"
-                )
-                st.download_button(
-                    "⬇️ Baixar PDF das senhas",
-                    data=pdf_bytes,
-                    file_name=f"senhas_{qtd}_areas.pdf",
-                    mime="application/pdf",
-                )
+                linhas = [
+                    f"* Área **{item['area']}** → senha **{item['senha']}** (registro {item['ts_registro']})."
+                    for item in resultados
+                ]
+                st.success("Senhas registradas com sucesso!")
+                st.markdown("\n".join(linhas))
+
+                if excedidas:
+                    avisos = [
+                        (
+                            f"Área **{info['area']}** excedeu o limite de {info['limite']} "
+                            f"senhas (atual: {info['senha']})."
+                        )
+                        for info in excedidas
+                    ]
+                    st.warning(
+                        "\n".join(
+                            [
+                                "⚠️ O PDF não foi gerado porque os limites abaixo foram atingidos:",
+                                *avisos,
+                            ]
+                        )
+                    )
+                elif pdf_bytes:
+                    if len(resultados) == 1:
+                        area_nome = resultados[0]["area"]
+                        senha_num = resultados[0]["senha"]
+                        base_name = f"senha_{area_nome}_{senha_num}"
+                    else:
+                        base_name = f"senhas_{len(resultados)}_areas"
+                    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", base_name).strip("_") or "senhas"
+                    file_name = f"{safe_name}.pdf"
+
+                    st.download_button(
+                        "⬇️ Baixar PDF das senhas",
+                        data=pdf_bytes,
+                        file_name=file_name,
+                        mime="application/pdf",
+                    )
             except ValueError as e:
                 st.error(str(e))
             except Exception as e:
