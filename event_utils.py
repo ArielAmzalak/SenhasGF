@@ -13,8 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from PIL import Image
-
 import qrcode
 from fpdf import FPDF
 from barcode import Code128
@@ -54,11 +52,6 @@ HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
 
 DEFAULT_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
 PDF_LOGO_PATH = os.getenv("PDF_LOGO_PATH")
-
-TICKET_WIDTH_MM = 80
-TICKET_HEIGHT_MM = 150
-LOGO_TOP_MARGIN_MM = 4
-LOGO_BOTTOM_SPACING_MM = 4
 
 
 def _normalize(s: str) -> str:
@@ -382,11 +375,11 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
 
 
 def _init_ticket_pdf() -> FPDF:
-    pdf = FPDF(unit="mm", format=(TICKET_WIDTH_MM, TICKET_HEIGHT_MM))
+    pdf = FPDF(unit="mm", format=(80, 150))  # ticket com espaço extra para logo/rodapé
     pdf.set_auto_page_break(False)
     pdf.set_left_margin(6)
     pdf.set_right_margin(6)
-    pdf.set_top_margin(LOGO_TOP_MARGIN_MM)
+    pdf.set_top_margin(8)
     return pdf
 
 
@@ -435,42 +428,31 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     buf_qr = io.BytesIO()
     qr_img.save(buf_qr, format="PNG")
     buf_qr.seek(0)
-    buf_qr.name = "qr.png"
 
     # Code128 com a senha
     buf_bar = io.BytesIO()
-    Code128(senha, writer=ImageWriter()).write(
-        buf_bar,
-        options={
-            "module_width": 0.3,
-            "module_height": 12,
-            "font_size": 8,
-        },
-    )
+    Code128(senha, writer=ImageWriter()).write(buf_bar, options={
+        "module_width": 0.3,
+        "module_height": 12,
+        "font_size": 8,
+    })
     buf_bar.seek(0)
-    buf_bar.name = "barcode.png"
 
     pdf.add_page()
-    pdf.set_y(LOGO_TOP_MARGIN_MM)
 
     logo_bytes = _load_logo_bytes()
     if logo_bytes:
         buf_logo = io.BytesIO(logo_bytes)
         buf_logo.name = "logo.png"
-        with Image.open(io.BytesIO(logo_bytes)) as logo_img:
-            logo_width = 36
-            if logo_img.width:
-                logo_height = logo_width * (logo_img.height / logo_img.width)
-            else:
-                logo_height = logo_width
-        logo_x = (TICKET_WIDTH_MM - logo_width) / 2
-        logo_y = LOGO_TOP_MARGIN_MM
-        pdf.image(buf_logo, x=logo_x, y=logo_y, w=logo_width, h=logo_height)
-        pdf.set_y(logo_y + logo_height + LOGO_BOTTOM_SPACING_MM)
+        logo_width = 36
+        logo_x = (80 - logo_width) / 2
+        y_before = pdf.get_y()
+        pdf.image(buf_logo, x=logo_x, y=y_before, w=logo_width)
+        pdf.set_y(y_before + logo_width + 2)
 
     # Cabeçalho
-    pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, "Galho Forte Em Ação", ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 8, "Distribuidor de Senhas", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
     pdf.ln(4)
@@ -485,7 +467,7 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     y = pdf.get_y()
     pdf.image(buf_bar, x=x + 10, y=y, w=50)
     pdf.ln(18)
-    pdf.image(buf_qr, x=(TICKET_WIDTH_MM - 30) / 2, y=pdf.get_y() + 2, w=30)
+    pdf.image(buf_qr, x=(80 - 30) / 2, y=pdf.get_y() + 2, w=30)
     pdf.ln(36)
 
     # Dados do participante
