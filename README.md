@@ -45,3 +45,9 @@ GOOGLE_SERVICE_ACCOUNT_JSON = """
 ## 🧱 Base / Inspiração
 
 - Padrão de autenticação e escrita no Sheets e técnica para extrair a linha gravada via `updatedRange` foram inspirados dos utilitários existentes (ver `utils.py` e `streamlit_app.py`).
+
+## 🖼️ Logotipo do PDF
+
+Para personalizar o cabeçalho do ticket, coloque um arquivo `logo.png` dentro da pasta `assets/`. O arquivo é lido em tempo de execução e **não precisa (nem deve) ser versionado**: ele já está listado no `.gitignore`, então faça o upload manual no ambiente de execução.
+
+Se preferir outro caminho, defina a variável de ambiente `PDF_LOGO_PATH` apontando para o arquivo desejado.
