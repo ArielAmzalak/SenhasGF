@@ -59,6 +59,15 @@ TICKET_WIDTH_MM = 80
 TICKET_HEIGHT_MM = 150
 LOGO_TOP_MARGIN_MM = 4
 LOGO_BOTTOM_SPACING_MM = 4
+BARCODE_WIDTH_MM = 50
+BARCODE_HEIGHT_MM = 14
+BARCODE_BOTTOM_SPACING_MM = 6
+QR_CODE_SIZE_MM = 30
+QR_CODE_TOP_SPACING_MM = 2
+QR_CODE_BOTTOM_SPACING_MM = 4
+DATA_LINE_HEIGHT_MM = 4.5
+DATA_SECTION_BOTTOM_SPACING_MM = 3
+FOOTER_LINE_HEIGHT_MM = 4
 
 
 def _normalize(s: str) -> str:
@@ -483,22 +492,34 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     # Barra + QR
     x = pdf.get_x()
     y = pdf.get_y()
-    pdf.image(buf_bar, x=x + 10, y=y, w=50)
-    pdf.ln(18)
-    pdf.image(buf_qr, x=(TICKET_WIDTH_MM - 30) / 2, y=pdf.get_y() + 2, w=30)
-    pdf.ln(36)
+    pdf.image(
+        buf_bar,
+        x=x + (TICKET_WIDTH_MM - BARCODE_WIDTH_MM) / 2,
+        y=y,
+        w=BARCODE_WIDTH_MM,
+        h=BARCODE_HEIGHT_MM,
+    )
+    pdf.ln(BARCODE_HEIGHT_MM + BARCODE_BOTTOM_SPACING_MM)
+    pdf.image(
+        buf_qr,
+        x=(TICKET_WIDTH_MM - QR_CODE_SIZE_MM) / 2,
+        y=pdf.get_y() + QR_CODE_TOP_SPACING_MM,
+        w=QR_CODE_SIZE_MM,
+        h=QR_CODE_SIZE_MM,
+    )
+    pdf.ln(QR_CODE_SIZE_MM + QR_CODE_TOP_SPACING_MM + QR_CODE_BOTTOM_SPACING_MM)
 
     # Dados do participante
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Nome: {nome}", ln=True)
-    pdf.cell(0, 6, f"Telefone: {tel}", ln=True)
-    pdf.cell(0, 6, f"Bairro: {bairro}", ln=True)
-    pdf.cell(0, 6, f"Registro: {ts}", ln=True)
-    pdf.ln(6)
+    pdf.cell(0, DATA_LINE_HEIGHT_MM, f"Nome: {nome}", ln=True)
+    pdf.cell(0, DATA_LINE_HEIGHT_MM, f"Telefone: {tel}", ln=True)
+    pdf.cell(0, DATA_LINE_HEIGHT_MM, f"Bairro: {bairro}", ln=True)
+    pdf.cell(0, DATA_LINE_HEIGHT_MM, f"Registro: {ts}", ln=True)
+    pdf.ln(DATA_SECTION_BOTTOM_SPACING_MM)
 
     # Rodapé
     pdf.set_font("Helvetica", "I", 8)
-    pdf.multi_cell(0, 4.5, "Guarde este ticket até o atendimento.", align="C")
+    pdf.multi_cell(0, FOOTER_LINE_HEIGHT_MM, "Guarde este ticket até o atendimento.", align="C")
 
 
 def _pdf_bytes(pdf: FPDF) -> bytes:
