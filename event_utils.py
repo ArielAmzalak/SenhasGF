@@ -444,15 +444,20 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     buf_qr = io.BytesIO()
     qr_img.save(buf_qr, format="PNG")
     buf_qr.seek(0)
+    buf_qr.name = "qr.png"
 
     # Code128 com a senha
     buf_bar = io.BytesIO()
-    Code128(senha, writer=ImageWriter()).write(buf_bar, options={
-        "module_width": 0.3,
-        "module_height": 12,
-        "font_size": 8,
-    })
+    Code128(senha, writer=ImageWriter()).write(
+        buf_bar,
+        options={
+            "module_width": 0.3,
+            "module_height": 12,
+            "font_size": 8,
+        },
+    )
     buf_bar.seek(0)
+    buf_bar.name = "barcode.png"
 
     pdf.add_page()
     pdf.set_y(LOGO_TOP_MARGIN_MM)
@@ -473,8 +478,8 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
         pdf.set_y(logo_y + logo_height + LOGO_BOTTOM_SPACING_MM)
 
     # Cabeçalho
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 8, "Distribuidor de Senhas", ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 15)
+    pdf.cell(0, 8, "Galho Forte Em Ação", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
     pdf.ln(4)
