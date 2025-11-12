@@ -410,8 +410,8 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     pdf.add_page()
 
     # Cabeçalho
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 8, "Distribuidor de Senhas", ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, "Galho Forte", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
     pdf.ln(2)
