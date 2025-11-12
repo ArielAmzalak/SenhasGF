@@ -7,7 +7,9 @@ import os
 import re
 import json
 import unicodedata
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -47,6 +49,9 @@ BAIRROS_SHEET = os.getenv("BAIRROS_SHEET", "Bairro")
 
 # ✅ Pedido do usuário: Spreadsheet ID definido **no código** (não em secrets)
 HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
+
+DEFAULT_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
+PDF_LOGO_PATH = os.getenv("PDF_LOGO_PATH")
 
 
 def _normalize(s: str) -> str:
@@ -370,12 +375,43 @@ def now_str(tz_name: str = DEFAULT_TIMEZONE) -> str:
 
 
 def _init_ticket_pdf() -> FPDF:
-    pdf = FPDF(unit="mm", format=(80, 120))  # ticket
+    pdf = FPDF(unit="mm", format=(80, 150))  # ticket com espaço extra para logo/rodapé
     pdf.set_auto_page_break(False)
     pdf.set_left_margin(6)
     pdf.set_right_margin(6)
-    pdf.set_top_margin(6)
+    pdf.set_top_margin(8)
     return pdf
+
+
+@lru_cache(maxsize=1)
+def _resolve_logo_path() -> Optional[Path]:
+    candidates: List[Path] = []
+    if PDF_LOGO_PATH:
+        raw = Path(PDF_LOGO_PATH).expanduser()
+        candidates.append(raw)
+        if not raw.is_absolute():
+            candidates.append(Path(__file__).resolve().parent / raw)
+    else:
+        candidates.append(DEFAULT_LOGO_PATH)
+
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+@lru_cache(maxsize=1)
+def _load_logo_bytes() -> Optional[bytes]:
+    path = _resolve_logo_path()
+    if not path:
+        return None
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
 
 
 def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
@@ -409,12 +445,22 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
 
     pdf.add_page()
 
+    logo_bytes = _load_logo_bytes()
+    if logo_bytes:
+        buf_logo = io.BytesIO(logo_bytes)
+        buf_logo.name = "logo.png"
+        logo_width = 36
+        logo_x = (80 - logo_width) / 2
+        y_before = pdf.get_y()
+        pdf.image(buf_logo, x=logo_x, y=y_before, w=logo_width)
+        pdf.set_y(y_before + logo_width + 2)
+
     # Cabeçalho
     pdf.set_font("Helvetica", "B", 15)
     pdf.cell(0, 8, "Galho Forte Em Ação", ln=True, align="C")
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 6, area, ln=True, align="C")
-    pdf.ln(2)
+    pdf.ln(4)
 
     # Senha grande
     pdf.set_font("Helvetica", "B", 40)
@@ -425,9 +471,9 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     x = pdf.get_x()
     y = pdf.get_y()
     pdf.image(buf_bar, x=x + 10, y=y, w=50)
-    pdf.ln(16)
+    pdf.ln(18)
     pdf.image(buf_qr, x=(80 - 30) / 2, y=pdf.get_y() + 2, w=30)
-    pdf.ln(34)
+    pdf.ln(36)
 
     # Dados do participante
     pdf.set_font("Helvetica", "", 10)
@@ -435,11 +481,11 @@ def _render_ticket_page(pdf: FPDF, data: Dict[str, str]) -> None:
     pdf.cell(0, 6, f"Telefone: {tel}", ln=True)
     pdf.cell(0, 6, f"Bairro: {bairro}", ln=True)
     pdf.cell(0, 6, f"Registro: {ts}", ln=True)
-    pdf.ln(2)
+    pdf.ln(6)
 
     # Rodapé
     pdf.set_font("Helvetica", "I", 8)
-    pdf.cell(0, 6, "Guarde este ticket até o atendimento.", ln=True, align="C")
+    pdf.multi_cell(0, 4.5, "Guarde este ticket até o atendimento.", align="C")
 
 
 def _pdf_bytes(pdf: FPDF) -> bytes:
