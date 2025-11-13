@@ -3,11 +3,16 @@
 from __future__ import annotations
 from typing import List, Dict
 import re
+import os
+
+from dotenv import load_dotenv
+import requests
 import streamlit as st
-import os, requests
+
+load_dotenv()
 
 PRINT_SERVER_URL = st.secrets.get("PRINT_SERVER_URL") or os.getenv("PRINT_SERVER_URL", "")
-PRINT_TOKEN      = st.secrets.get("PRINT_TOKEN")      or os.getenv("PRINT_TOKEN", "")
+PRINT_TOKEN = st.secrets.get("PRINT_TOKEN") or os.getenv("PRINT_TOKEN", "")
 
 
 def enviar_para_impressao(pdf_bytes: bytes) -> tuple[bool, str | None]:

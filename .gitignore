@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
+.env
+.env.*
+!.env.example
+.streamlit/
+client_secret.json
+token.json
+credentials/
 assets/logo.png
