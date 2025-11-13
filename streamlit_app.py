@@ -9,6 +9,24 @@ import os, requests
 PRINT_SERVER_URL = st.secrets.get("PRINT_SERVER_URL") or os.getenv("PRINT_SERVER_URL", "")
 PRINT_TOKEN      = st.secrets.get("PRINT_TOKEN")      or os.getenv("PRINT_TOKEN", "")
 
+
+def enviar_para_impressao(pdf_bytes: bytes) -> tuple[bool, str | None]:
+    if not (PRINT_SERVER_URL and PRINT_TOKEN):
+        return False, "PRINT_SERVER_URL/PRINT_TOKEN não configurados."
+    try:
+        url = PRINT_SERVER_URL.rstrip("/") + "/print/pdf"
+        r = requests.post(
+            url,
+            headers={"X-Token": PRINT_TOKEN, "Content-Type": "application/pdf"},
+            data=pdf_bytes,
+            timeout=30,
+        )
+        if r.ok:
+            return True, None
+        return False, f"Falha HTTP {r.status_code}: {r.text}"
+    except Exception as e:
+        return False, str(e)
+
 from event_utils import (
     read_active_areas,
     read_neighborhoods,
@@ -138,6 +156,11 @@ else:
                         file_name=file_name,
                         mime="application/pdf",
                     )
+                    ok, err = enviar_para_impressao(pdf_bytes)
+                    if ok:
+                        st.success("🖨️ Enviado automaticamente para impressão.")
+                    else:
+                        st.warning(f"Não foi possível imprimir automaticamente: {err}")
             except ValueError as e:
                 st.error(str(e))
             except Exception as e:
