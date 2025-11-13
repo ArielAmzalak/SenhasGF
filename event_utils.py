@@ -25,8 +25,17 @@ from google.oauth2.credentials import Credentials as UserCredentials
 from google.auth.transport.requests import Request
 
 try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - pacote opcional durante import estático
+    load_dotenv = None
+
+if load_dotenv:
+    # Carrega variáveis do arquivo `.env` quando disponível.
+    load_dotenv()
+
+try:
     import streamlit as st
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover - Streamlit não é necessário para testes utilitários
     st = None
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -47,8 +56,8 @@ NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")
 # Aba com a lista de bairros
 BAIRROS_SHEET = os.getenv("BAIRROS_SHEET", "Bairro")
 
-# ✅ Pedido do usuário: Spreadsheet ID definido **no código** (não em secrets)
-HARDCODED_SPREADSHEET_ID = "1eEvF5c8rTXwWKqgmyCMXU5OPJKqBk5XPt4Yry5B4x5c"
+# Quando definido, sobrescreve o ID da planilha lido das variáveis/segredos.
+HARDCODED_SPREADSHEET_ID = os.getenv("HARDCODED_SPREADSHEET_ID", "").strip()
 
 DEFAULT_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
 PDF_LOGO_PATH = os.getenv("PDF_LOGO_PATH")
@@ -122,32 +131,53 @@ def _parse_positive_int(value: Any) -> Optional[int]:
     return num if num > 0 else None
 
 
+def _read_json_from_env_or_file(env_key: str, file_key: str) -> Optional[str]:
+    """Lê um JSON serializado diretamente na variável ou a partir de um arquivo."""
+
+    raw = os.getenv(env_key)
+    if raw:
+        return raw
+
+    path_value = os.getenv(file_key)
+    if path_value:
+        file_path = Path(path_value).expanduser()
+        try:
+            return file_path.read_text(encoding="utf-8")
+        except OSError as exc:  # pragma: no cover - depende do ambiente externo
+            raise RuntimeError(
+                f"Não foi possível ler o arquivo '{file_path}' definido em {file_key}."
+            ) from exc
+    return None
+
+
 def _authorize_google_sheets():
-    # Prefer service account (GOOGLE_SERVICE_ACCOUNT_JSON) quando rodar na nuvem
+    # Prefer service account (GOOGLE_SERVICE_ACCOUNT_JSON/FILE)
     sa_json = None
     if st:
         sa_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", None)
     if not sa_json:
-        sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        sa_json = _read_json_from_env_or_file("GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_SERVICE_ACCOUNT_FILE")
 
     if sa_json:
         try:
             info = json.loads(sa_json)
             creds = SACredentials.from_service_account_info(info, scopes=SCOPES)
             return creds
-        except Exception as exc:
+        except Exception as exc:  # pragma: no cover - erros dependem do JSON externo
             raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON inválido.") from exc
 
-    # Fallback: OAuth de usuário (GOOGLE_CLIENT_SECRET) — compatível com apps antigos
+    # Fallback: OAuth de usuário (GOOGLE_CLIENT_SECRET)
     client_json = None
     if st:
         client_json = st.secrets.get("GOOGLE_CLIENT_SECRET", None)
     if not client_json:
-        client_json = os.getenv("GOOGLE_CLIENT_SECRET")
+        client_json = _read_json_from_env_or_file("GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET_FILE")
     if not client_json:
-        raise RuntimeError("Credenciais Google ausentes. Defina GOOGLE_SERVICE_ACCOUNT_JSON (preferível) ou GOOGLE_CLIENT_SECRET.")
+        raise RuntimeError(
+            "Credenciais Google ausentes. Defina GOOGLE_SERVICE_ACCOUNT_JSON/FILE (preferível) ou GOOGLE_CLIENT_SECRET/FILE."
+        )
 
-    token_path = "token.json"
+    token_path = os.getenv("GOOGLE_TOKEN_PATH", "token.json")
     creds = None
     if os.path.exists(token_path):
         creds = UserCredentials.from_authorized_user_file(token_path, SCOPES)
