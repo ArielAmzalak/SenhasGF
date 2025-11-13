@@ -4,6 +4,10 @@ from __future__ import annotations
 from typing import List, Dict
 import re
 import streamlit as st
+import os, requests
+
+PRINT_SERVER_URL = st.secrets.get("PRINT_SERVER_URL") or os.getenv("PRINT_SERVER_URL", "")
+PRINT_TOKEN      = st.secrets.get("PRINT_TOKEN")      or os.getenv("PRINT_TOKEN", "")
 
 from event_utils import (
     read_active_areas,
