@@ -2,6 +2,7 @@
 # streamlit_app_senhas.py — UI Streamlit para o Distribuidor de Senhas
 from __future__ import annotations
 from typing import List, Dict
+import inspect
 import re
 import streamlit as st
 import os, requests
@@ -124,14 +125,24 @@ else:
     if btn:
         with st.spinner("Gravando na planilha e gerando PDF..."):
             try:
-                resultados, pdf_bytes, excedidas = submit_tickets(
-                    areas=areas_sel,
-                    nome=nome,
-                    telefone=telefone_input,
-                    bairro=bairro,
-                    rede_social=rede_social_input,
-                    email=email_input,
-                )
+                submit_kwargs = {
+                    "areas": areas_sel,
+                    "nome": nome,
+                    "telefone": telefone_input,
+                    "bairro": bairro,
+                }
+
+                try:
+                    params = inspect.signature(submit_tickets).parameters
+                except (ValueError, TypeError):
+                    params = {}
+
+                if "rede_social" in params:
+                    submit_kwargs["rede_social"] = rede_social_input
+                if "email" in params:
+                    submit_kwargs["email"] = email_input
+
+                resultados, pdf_bytes, excedidas = submit_tickets(**submit_kwargs)
                 linhas = [
                     f"* Área **{item['area']}** → senha **{item['senha']}** (registro {item['ts_registro']})."
                     for item in resultados
