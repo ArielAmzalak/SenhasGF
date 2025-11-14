@@ -77,6 +77,18 @@ else:
     nome_input = st.text_input("Nome", max_chars=80)
     nome = nome_input.strip()
     telefone_input = st.text_input("Telefone", max_chars=30, placeholder="92981231234")
+    rede_social_input = st.text_input(
+        "Rede social (@...)",
+        max_chars=80,
+        placeholder="@seudominio",
+        help="Opcional. Informe o usuário ou perfil principal.",
+    )
+    email_input = st.text_input(
+        "E-mail",
+        max_chars=120,
+        placeholder="nome@exemplo.com",
+        help="Opcional. Será armazenado apenas na planilha.",
+    )
     telefone_ok = True
     telefone_msg = ""
     telefone_preview = ""
@@ -116,6 +128,8 @@ else:
                     nome=nome,
                     telefone=telefone_input,
                     bairro=bairro,
+                    rede_social=rede_social_input,
+                    email=email_input,
                 )
                 linhas = [
                     f"* Área **{item['area']}** → senha **{item['senha']}** (registro {item['ts_registro']})."
