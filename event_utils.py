@@ -36,10 +36,28 @@ HEADERS = [
     "Senha",
     "Nome",
     "Telefone",
+    "Rede Social",
+    "E-mail",
     "Bairro",
     "Data e Hora de Registro",
     "Data e Hora de Atendimento",
 ]
+
+
+def _column_letter(idx: int) -> str:
+    """Converte um índice baseado em zero para a letra de coluna do Sheets/Excel."""
+
+    idx += 1
+    letters = []
+    while idx > 0:
+        idx, rem = divmod(idx - 1, 26)
+        letters.append(chr(ord("A") + rem))
+    return "".join(reversed(letters))
+
+
+def _header_range(title: str) -> str:
+    last_col = _column_letter(len(HEADERS) - 1)
+    return f"{title}!A1:{last_col}1"
 
 # Aba com as áreas/setores
 NOMES_SHEET = os.getenv("NOMES_SHEET", "Nomes")
@@ -220,7 +238,7 @@ def ensure_area_sheet(service, spreadsheet_id: str, title: str) -> None:
         # escreve cabeçalho
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
-            range=f"{title}!A1:F1",
+            range=_header_range(title),
             valueInputOption="RAW",
             body={"values": [HEADERS]},
         ).execute()
@@ -234,7 +252,7 @@ def ensure_area_sheet(service, spreadsheet_id: str, title: str) -> None:
     if not row1 or not row1[0]:
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
-            range=f"{title}!A1:F1",
+            range=_header_range(title),
             valueInputOption="RAW",
             body={"values": [HEADERS]},
         ).execute()
@@ -327,15 +345,8 @@ def append_ticket_and_get_number(service, spreadsheet_id: str, sheet_title: str,
     # Garante a aba e cabeçalhos
     ensure_area_sheet(service, spreadsheet_id, sheet_title)
 
-    # Append sem a coluna Senha (deixa vazio em A); gravar B..F
-    body = {"values": [[
-        "",  # Senha (será preenchida em seguida)
-        row_values[1],  # Nome
-        row_values[2],  # Telefone
-        row_values[3],  # Bairro
-        row_values[4],  # Data e Hora de Registro
-        row_values[5],  # Data e Hora de Atendimento
-    ]]}
+    # Append mantém a coluna Senha vazia (índice 0) para ser atualizada após o append
+    body = {"values": [row_values]}
     append_result = service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
         range=f"{sheet_title}!A1",
@@ -506,7 +517,12 @@ def generate_tickets_pdf(tickets: List[Dict[str, str]]) -> bytes:
 
 
 def submit_tickets(
-    areas: List[str], nome: str, telefone: str, bairro: str
+    areas: List[str],
+    nome: str,
+    telefone: str,
+    bairro: str,
+    rede_social: str = "",
+    email: str = "",
 ) -> Tuple[List[Dict[str, Any]], Optional[bytes], List[Dict[str, Any]]]:
     """Submete uma ou mais senhas para diferentes áreas."""
 
@@ -527,6 +543,8 @@ def submit_tickets(
 
     telefone_fmt = format_phone_number(telefone)
     bairro_fmt = (bairro or "").strip()
+    rede_social_fmt = (rede_social or "").strip()
+    email_fmt = (email or "").strip()
 
     resultados: List[Dict[str, Any]] = []
     tickets_payload: List[Dict[str, str]] = []
@@ -535,7 +553,16 @@ def submit_tickets(
     for area in areas:
         sheet_title = map_area_sheet.get(area) or area
         ts = now_str()
-        row = ["", nome_fmt, telefone_fmt, bairro_fmt, ts, ""]
+        row = [
+            "",
+            nome_fmt,
+            telefone_fmt,
+            rede_social_fmt,
+            email_fmt,
+            bairro_fmt,
+            ts,
+            "",
+        ]
         senha_num = append_ticket_and_get_number(service, spreadsheet_id, sheet_title, row)
 
         registro = {
@@ -545,6 +572,8 @@ def submit_tickets(
             "nome": nome_fmt,
             "telefone": telefone_fmt,
             "bairro": bairro_fmt,
+            "rede_social": rede_social_fmt,
+            "email": email_fmt,
             "ts_registro": ts,
         }
         resultados.append(registro)
@@ -564,10 +593,19 @@ def submit_tickets(
     return resultados, pdf_bytes, excedidas
 
 
-def submit_ticket(area: str, nome: str, telefone: str, bairro: str) -> Tuple[int, bytes]:
+def submit_ticket(
+    area: str,
+    nome: str,
+    telefone: str,
+    bairro: str,
+    rede_social: str = "",
+    email: str = "",
+) -> Tuple[int, bytes]:
     """Compatibilidade: submete apenas uma área."""
 
-    resultados, pdf_bytes, excedidas = submit_tickets([area], nome, telefone, bairro)
+    resultados, pdf_bytes, excedidas = submit_tickets(
+        [area], nome, telefone, bairro, rede_social=rede_social, email=email
+    )
     if not resultados:
         raise ValueError("Falha ao gerar a senha.")
     if excedidas:
